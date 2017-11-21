@@ -56,6 +56,7 @@ http://www.raspberrypi.org/wp-content/uploads/2012/02/BCM2835-ARM-Peripherals.pd
 package rpio
 
 import (
+	"fmt"
 	"bytes"
 	"encoding/binary"
 	"os"
@@ -64,10 +65,22 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
+
+	"github.com/gizak/termui"
 )
 
+type Device interface {
+	Pin(num uint8) *Pin
+	PinMode(pin *Pin, direction Direction)
+	WritePin(pin *Pin, state State)
+	ReadPin(pin *Pin) State
+	TogglePin(pin *Pin)
+	PullMode(pin *Pin, pull Pull)
+	Open() (err error)
+	Close() error
+}
+
 type Direction uint8
-type Pin uint8
 type State uint8
 type Pull uint8
 
@@ -106,72 +119,94 @@ var (
 	mem8    []uint8
 )
 
+type Pin struct {
+	PinNum uint8
+	device Device
+}
+
 // Set pin as Input
-func (pin Pin) Input() {
-	PinMode(pin, Input)
+func (p *Pin) Input() {
+	p.device.PinMode(p, Input)
 }
 
 // Set pin as Output
-func (pin Pin) Output() {
-	PinMode(pin, Output)
+func (p *Pin) Output() {
+	p.device.PinMode(p, Output)
 }
 
 // Set pin High
-func (pin Pin) High() {
-	WritePin(pin, High)
+func (p *Pin) High() {
+	p.device.WritePin(p, High)
 }
 
 // Set pin Low
-func (pin Pin) Low() {
-	WritePin(pin, Low)
+func (p *Pin) Low() {
+	p.device.WritePin(p, Low)
 }
 
 // Toggle pin state
-func (pin Pin) Toggle() {
-	TogglePin(pin)
+func (p *Pin) Toggle() {
+	p.device.TogglePin(p)
 }
 
 // Set pin Direction
-func (pin Pin) Mode(dir Direction) {
-	PinMode(pin, dir)
+func (p *Pin) Mode(dir Direction) {
+	p.device.PinMode(p, dir)
 }
 
 // Set pin state (high/low)
-func (pin Pin) Write(state State) {
-	WritePin(pin, state)
+func (p *Pin) Write(state State) {
+	p.device.WritePin(p, state)
 }
 
 // Read pin state (high/low)
-func (pin Pin) Read() State {
-	return ReadPin(pin)
+func (p *Pin) Read() State {
+	return p.device.ReadPin(p)
 }
 
 // Set a given pull up/down mode
-func (pin Pin) Pull(pull Pull) {
-	PullMode(pin, pull)
+func (p *Pin) Pull(pull Pull) {
+	p.device.PullMode(p, pull)
 }
 
 // Pull up pin
-func (pin Pin) PullUp() {
-	PullMode(pin, PullUp)
+func (p *Pin) PullUp() {
+	p.device.PullMode(p, PullUp)
 }
 
 // Pull down pin
-func (pin Pin) PullDown() {
-	PullMode(pin, PullDown)
+func (p *Pin) PullDown() {
+	p.device.PullMode(p, PullDown)
 }
 
 // Disable pullup/down on pin
-func (pin Pin) PullOff() {
-	PullMode(pin, PullOff)
+func (p *Pin) PullOff() {
+	p.device.PullMode(p, PullOff)
+}
+
+//An instance of a physical device must be a singleton because it always changes the same shared memory
+var instance *PhysicalDevice
+
+func NewPhysicalDevice() *PhysicalDevice {
+	if instance == nil {
+		instance = &PhysicalDevice{}
+	}
+	return instance
+}
+
+type PhysicalDevice struct{}
+
+// Pin refers to the bcm2835 pin
+func (d *PhysicalDevice) Pin(num uint8) *Pin {
+	return &Pin{PinNum: num, device: d}
 }
 
 // PinMode sets the direction of a given pin (Input or Output)
-func PinMode(pin Pin, direction Direction) {
+func (d *PhysicalDevice) PinMode(pin *Pin, direction Direction) {
 
 	// Pin fsel register, 0 or 1 depending on bank
-	fsel := uint8(pin) / 10
-	shift := (uint8(pin) % 10) * 3
+	fsel := uint8(pin.PinNum) / 10
+	shift := (uint8(pin.PinNum) % 10) * 3
 
 	memlock.Lock()
 	defer memlock.Unlock()
@@ -186,9 +221,9 @@ func PinMode(pin Pin, direction Direction) {
 
 // WritePin sets a given pin High or Low
 // by setting the clear or set registers respectively
-func WritePin(pin Pin, state State) {
+func (d *PhysicalDevice) WritePin(pin *Pin, state State) {
 
-	p := uint8(pin)
+	p := uint8(pin.PinNum)
 
 	// Clear register, 10 / 11 depending on bank
 	// Set register, 7 / 8 depending on bank
@@ -207,11 +242,11 @@ func WritePin(pin Pin, state State) {
 }
 
 // Read the state of a pin
-func ReadPin(pin Pin) State {
+func (d *PhysicalDevice) ReadPin(pin *Pin) State {
 	// Input level register offset (13 / 14 depending on bank)
-	levelReg := uint8(pin)/32 + 13
+	levelReg := uint8(pin.PinNum)/32 + 13
 
-	if (mem[levelReg] & (1 << uint8(pin))) != 0 {
+	if (mem[levelReg] & (1 << uint8(pin.PinNum))) != 0 {
 		return High
 	}
 
@@ -220,8 +255,8 @@ func ReadPin(pin Pin) State {
 
 // Toggle a pin state (high -> low -> high)
 // TODO: probably possible to do this much faster without read
-func TogglePin(pin Pin) {
-	switch ReadPin(pin) {
+func (d *PhysicalDevice) TogglePin(pin *Pin) {
+	switch d.ReadPin(pin) {
 	case Low:
 		pin.High()
 	case High:
@@ -229,11 +264,11 @@ func TogglePin(pin Pin) {
 	}
 }
 
-func PullMode(pin Pin, pull Pull) {
+func (d *PhysicalDevice) PullMode(pin *Pin, pull Pull) {
 	// Pull up/down/off register has offset 38 / 39, pull is 37
-	pullClkReg := uint8(pin)/32 + 38
+	pullClkReg := uint8(pin.PinNum)/32 + 38
 	pullReg := 37
-	shift := (uint8(pin) % 32)
+	shift := (uint8(pin.PinNum) % 32)
 
 	memlock.Lock()
 	defer memlock.Unlock()
@@ -260,7 +295,7 @@ func PullMode(pin Pin, pull Pull) {
 
 // Open and memory map GPIO memory range from /dev/mem .
 // Some reflection magic is used to convert it to a unsafe []uint32 pointer
-func Open() (err error) {
+func (d *PhysicalDevice) Open() (err error) {
 	var file *os.File
 	var base int64
 
@@ -309,9 +344,12 @@ func Open() (err error) {
 }
 
 // Close unmaps GPIO memory
-func Close() error {
+func (d *PhysicalDevice) Close() error {
 	memlock.Lock()
 	defer memlock.Unlock()
+	defer func() {
+		instance = nil
+	}()
 	return syscall.Munmap(mem8)
 }
 
@@ -336,4 +374,117 @@ func getGPIOBase() (base int64) {
 		return
 	}
 	return int64(out + 0x200000)
+}
+
+func NewPi3Simulator() *Pi3Simulator {
+	pi := &Pi3Simulator{}
+	pi.pins = []*SimulatedPin{
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "3.3V PWR"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR"},
+		&SimulatedPin{Pin: &Pin{PinNum: 2, device: pi}, name: "GPIO 2"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR"},
+		&SimulatedPin{Pin: &Pin{PinNum: 3, device: pi}, name: "GPIO 3"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND"},
+	}
+	return pi
+}
+
+type SimulatedPin struct {
+	*Pin
+	name      string
+	state     State
+	pull      Pull
+	direction Direction
+}
+
+type Pi3Simulator struct {
+	pins []*SimulatedPin
+}
+
+func (d *Pi3Simulator) Pin(num uint8) *Pin {
+	return d.p(num).Pin
+}
+
+func (d *Pi3Simulator) PinMode(pin *Pin, direction Direction) {
+	d.p(pin.PinNum).direction = direction
+}
+
+func (d *Pi3Simulator) WritePin(pin *Pin, state State) {
+	d.p(pin.PinNum).state = state
+}
+
+func (d *Pi3Simulator) ReadPin(pin *Pin) State {
+	return d.pins[int(pin.PinNum)].state
+}
+
+func (d *Pi3Simulator) TogglePin(pin *Pin) {
+	if d.p(pin.PinNum).state == High {
+		d.p(pin.PinNum).state = Low
+		return
+	}
+	d.p(pin.PinNum).state = High
+}
+
+func (d *Pi3Simulator) PullMode(pin *Pin, pull Pull) {
+	d.p(pin.PinNum).pull = pull
+}
+
+func (d *Pi3Simulator) Open() (err error) {
+	err = termui.Init()
+	if err != nil {
+		panic(err)
+	}
+
+	go d.render()
+
+	return
+}
+
+func (d *Pi3Simulator) Close() error {
+	termui.Close()
+	return nil
+}
+
+func (d *Pi3Simulator) render() {
+
+	draw := func() {
+		strs := []string{}
+		for physicalPin, pin := range d.pins {
+			strs = append(strs, fmt.Sprintf("[%d] %s | %s", physicalPin, pin.name, stateString(pin.state)))
+		}
+
+		ls := termui.NewList()
+		ls.Items = strs
+		ls.ItemFgColor = termui.ColorYellow
+		ls.BorderLabel = "GPIO Pins"
+		ls.Height = 7
+		ls.Width = 25
+		ls.Y = 0
+
+		termui.Render(ls)
+	}
+
+	termui.Handle("/sys/kbd/q", func(e termui.Event) {
+		termui.StopLoop()
+	})
+	termui.Handle("/timer/1s", func(e termui.Event) {
+		draw()
+	})
+	termui.Loop()
+}
+
+func (d *Pi3Simulator) p(num uint8) *SimulatedPin {
+	for _, p := range d.pins {
+		if p.Pin.PinNum == num {
+			return p
+		}
+	}
+	return nil
+}
+
+func stateString(state State) string {
+	if state == Low {
+		return "LOW"
+	}
+	return "HIGH"
 }
