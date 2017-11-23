@@ -56,7 +56,9 @@ http://www.raspberrypi.org/wp-content/uploads/2012/02/BCM2835-ARM-Peripherals.pd
 package rpio
 
 import (
+	"github.com/mgutz/ansi"
 	"fmt"
+	"github.com/olekukonko/tablewriter"
 	"bytes"
 	"encoding/binary"
 	"os"
@@ -379,12 +381,46 @@ func getGPIOBase() (base int64) {
 func NewPi3Simulator() *Pi3Simulator {
 	pi := &Pi3Simulator{}
 	pi.pins = []*SimulatedPin{
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "3.3V PWR"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR"},
-		&SimulatedPin{Pin: &Pin{PinNum: 2, device: pi}, name: "GPIO 2"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR"},
-		&SimulatedPin{Pin: &Pin{PinNum: 3, device: pi}, name: "GPIO 3"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "3.3V PWR", pinType: "power"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR", pinType: "power"},
+		&SimulatedPin{Pin: &Pin{PinNum: 2, device: pi}, name: "GPIO 2", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR", pinType: "power"},
+		&SimulatedPin{Pin: &Pin{PinNum: 3, device: pi}, name: "GPIO 3", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		&SimulatedPin{Pin: &Pin{PinNum: 4, device: pi}, name: "GPIO 4", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "UARTO TX", pinType: "-"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "UARTO RX", pinType: "-"},
+		&SimulatedPin{Pin: &Pin{PinNum: 17, device: pi}, name: "GPIO 17", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 18, device: pi}, name: "GPIO 18", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 27, device: pi}, name: "GPIO 27", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		&SimulatedPin{Pin: &Pin{PinNum: 22, device: pi}, name: "GPIO 22", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 23, device: pi}, name: "GPIO 23", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "3.3V PWR", pinType: "power"},
+		&SimulatedPin{Pin: &Pin{PinNum: 24, device: pi}, name: "GPIO 24", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 10, device: pi}, name: "GPIO 10", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		&SimulatedPin{Pin: &Pin{PinNum: 9, device: pi}, name: "GPIO 9", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 25, device: pi}, name: "GPIO 25", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 11, device: pi}, name: "GPIO 11", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 8, device: pi}, name: "GPIO 8", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		&SimulatedPin{Pin: &Pin{PinNum: 7, device: pi}, name: "GPIO 7", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "RESERVED", pinType: "-"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "RESERVED", pinType: "-"},
+		&SimulatedPin{Pin: &Pin{PinNum: 5, device: pi}, name: "GPIO 5", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		&SimulatedPin{Pin: &Pin{PinNum: 6, device: pi}, name: "GPIO 6", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 12, device: pi}, name: "GPIO 12", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 13, device: pi}, name: "GPIO 13", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		&SimulatedPin{Pin: &Pin{PinNum: 19, device: pi}, name: "GPIO 19", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 16, device: pi}, name: "GPIO 16", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 26, device: pi}, name: "GPIO 26", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 20, device: pi}, name: "GPIO 20", pinType: "io"},
+		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		&SimulatedPin{Pin: &Pin{PinNum: 21, device: pi}, name: "GPIO 21", pinType: "io"},
 	}
 	return pi
 }
@@ -395,6 +431,7 @@ type SimulatedPin struct {
 	state     State
 	pull      Pull
 	direction Direction
+	pinType string
 }
 
 type Pi3Simulator struct {
@@ -446,31 +483,56 @@ func (d *Pi3Simulator) Close() error {
 }
 
 func (d *Pi3Simulator) render() {
+	
 
-	draw := func() {
-		strs := []string{}
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetColumnAlignment([]int{
+		tablewriter.ALIGN_RIGHT, 
+		tablewriter.ALIGN_RIGHT, 
+		tablewriter.ALIGN_CENTER,
+		tablewriter.ALIGN_CENTER,
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT,
+	})
+	table.SetHeader([]string{"PULL", "STATE", "NAME", "PIN", "PIN", "NAME", "STATE", "PULL"})
+	
+	for {
+		table.ClearRows()
+		table.SetColumnAlignment([]int{
+			tablewriter.ALIGN_RIGHT, 
+			tablewriter.ALIGN_RIGHT, 
+			tablewriter.ALIGN_RIGHT,
+		})
+
+		row := []string{}
 		for physicalPin, pin := range d.pins {
-			strs = append(strs, fmt.Sprintf("[%d] %s | %s", physicalPin, pin.name, stateString(pin.state)))
+			if physicalPin % 2 == 0 {
+				row = append(
+					row, 
+					pullString(pin.pull),
+					stateString(pin.state),
+					pin.name,
+					fmt.Sprintf("%d", physicalPin+1),
+				)
+			} else {
+				row = append(
+					row,
+					fmt.Sprintf("%d", physicalPin+1),
+					pin.name,
+					stateString(pin.state),
+					pullString(pin.pull),
+				)
+				//next line
+				table.Append(row)
+				row = []string{}
+			}
 		}
 
-		ls := termui.NewList()
-		ls.Items = strs
-		ls.ItemFgColor = termui.ColorYellow
-		ls.BorderLabel = "GPIO Pins"
-		ls.Height = 7
-		ls.Width = 25
-		ls.Y = 0
-
-		termui.Render(ls)
+		print("\033[H\033[2J")
+		table.Render()
+		
+		time.Sleep(time.Millisecond * 100)
 	}
-
-	termui.Handle("/sys/kbd/q", func(e termui.Event) {
-		termui.StopLoop()
-	})
-	termui.Handle("/timer/1s", func(e termui.Event) {
-		draw()
-	})
-	termui.Loop()
 }
 
 func (d *Pi3Simulator) p(num uint8) *SimulatedPin {
@@ -484,7 +546,20 @@ func (d *Pi3Simulator) p(num uint8) *SimulatedPin {
 
 func stateString(state State) string {
 	if state == Low {
-		return "LOW"
+		return ansi.Color("LOW", "green")
 	}
-	return "HIGH"
+	return ansi.Color("HIGH", "red")
+}
+
+func pullString(pull Pull) string {
+	if pull == PullUp {
+		return ansi.Color("UP", "red")
+	}
+	if pull == PullDown {
+		return ansi.Color("DOWN", "green")
+	}
+	if pull == PullOff {
+		return "OFF"
+	}
+	return "NA"
 }
