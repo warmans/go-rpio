@@ -71,7 +71,7 @@ import (
 )
 
 type Device interface {
-	Pin(num uint8) *Pin
+	Pin(num uint8, initialDirection Direction, initialPull Pull) *Pin
 	PinMode(pin *Pin, direction Direction)
 	WritePin(pin *Pin, state State)
 	ReadPin(pin *Pin) State
@@ -198,8 +198,11 @@ func NewPhysicalDevice() *PhysicalDevice {
 type PhysicalDevice struct{}
 
 // Pin refers to the bcm2835 pin
-func (d *PhysicalDevice) Pin(num uint8) *Pin {
-	return &Pin{PinNum: num, device: d}
+func (d *PhysicalDevice) Pin(num uint8, initialDirection Direction, initialPull Pull) *Pin {
+	p := &Pin{PinNum: num, device: d}
+	d.PinMode(p, initialDirection)
+	d.PullMode(p, initialPull)
+	return p
 }
 
 // PinMode sets the direction of a given pin (Input or Output)
@@ -438,8 +441,11 @@ type Pi3Simulator struct {
 	close chan bool
 }
 
-func (d *Pi3Simulator) Pin(num uint8) *Pin {
-	return d.p(num).Pin
+func (d *Pi3Simulator) Pin(num uint8, initialDirection Direction, initialPull Pull) *Pin {
+	p :=  d.p(num)
+	p.direction = initialDirection
+	p.pull = initialPull
+	return p.Pin
 }
 
 func (d *Pi3Simulator) PinMode(pin *Pin, direction Direction) {
@@ -482,12 +488,16 @@ func (d *Pi3Simulator) render() {
 	table.SetColumnAlignment([]int{
 		tablewriter.ALIGN_RIGHT,
 		tablewriter.ALIGN_RIGHT,
-		tablewriter.ALIGN_CENTER,
-		tablewriter.ALIGN_CENTER,
+		tablewriter.ALIGN_RIGHT,
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_RIGHT,
+		tablewriter.ALIGN_LEFT,
+		tablewriter.ALIGN_LEFT,
 		tablewriter.ALIGN_LEFT,
 		tablewriter.ALIGN_LEFT,
 	})
-	table.SetHeader([]string{"PULL", "STATE", "NAME", "PIN", "PIN", "NAME", "STATE", "PULL"})
+	table.SetHeader([]string{"PULL", "DIR", "STATE", "NAME", "PIN", "PIN", "NAME", "STATE", "DIR", "PULL"})
 
 	ticker := time.NewTicker(time.Millisecond * 100)
 	for {
@@ -500,6 +510,7 @@ func (d *Pi3Simulator) render() {
 				tablewriter.ALIGN_RIGHT,
 				tablewriter.ALIGN_RIGHT,
 				tablewriter.ALIGN_RIGHT,
+				tablewriter.ALIGN_RIGHT,
 			})
 
 			row := []string{}
@@ -508,6 +519,7 @@ func (d *Pi3Simulator) render() {
 					row = append(
 						row,
 						pullString(pin.pull),
+						directionString(pin.direction),
 						stateString(pin.state),
 						pin.name,
 						fmt.Sprintf("%d", physicalPin+1),
@@ -518,6 +530,7 @@ func (d *Pi3Simulator) render() {
 						fmt.Sprintf("%d", physicalPin+1),
 						pin.name,
 						stateString(pin.state),
+						directionString(pin.direction),
 						pullString(pin.pull),
 					)
 					//next line
@@ -546,6 +559,16 @@ func stateString(state State) string {
 		return ansi.Color("LOW", "green")
 	}
 	return ansi.Color("HIGH", "red")
+}
+
+func directionString(dir Direction) string {
+	if dir == Input {
+		return "INPUT"
+	}
+	if dir == Output {
+		return "OUTPUT"
+	}
+	return "UNDEF"
 }
 
 func pullString(pull Pull) string {

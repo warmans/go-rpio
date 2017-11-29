@@ -28,10 +28,7 @@ func main() {
 	}
 	defer pi.Close()
 
-	pin := pi.Pin(2)
-
-	// Set pin to output mode
-	pin.Output()
+	pin := pi.Pin(2, rpio.Output, rpio.PullOff)
 
 	// Toggle pin 20 times
 	for x := 0; x < 100; x++ {
