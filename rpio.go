@@ -56,11 +56,9 @@ http://www.raspberrypi.org/wp-content/uploads/2012/02/BCM2835-ARM-Peripherals.pd
 package rpio
 
 import (
-	"github.com/mgutz/ansi"
-	"fmt"
-	"github.com/olekukonko/tablewriter"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"reflect"
 	"sync"
@@ -68,7 +66,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/gizak/termui"
+	"github.com/mgutz/ansi"
+	"github.com/olekukonko/tablewriter"
 )
 
 type Device interface {
@@ -379,7 +378,7 @@ func getGPIOBase() (base int64) {
 }
 
 func NewPi3Simulator() *Pi3Simulator {
-	pi := &Pi3Simulator{}
+	pi := &Pi3Simulator{close: make(chan bool, 1)}
 	pi.pins = []*SimulatedPin{
 		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "3.3V PWR", pinType: "power"},
 		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR", pinType: "power"},
@@ -431,11 +430,12 @@ type SimulatedPin struct {
 	state     State
 	pull      Pull
 	direction Direction
-	pinType string
+	pinType   string
 }
 
 type Pi3Simulator struct {
-	pins []*SimulatedPin
+	pins  []*SimulatedPin
+	close chan bool
 }
 
 func (d *Pi3Simulator) Pin(num uint8) *Pin {
@@ -467,71 +467,68 @@ func (d *Pi3Simulator) PullMode(pin *Pin, pull Pull) {
 }
 
 func (d *Pi3Simulator) Open() (err error) {
-	err = termui.Init()
-	if err != nil {
-		panic(err)
-	}
-
 	go d.render()
-
 	return
 }
 
 func (d *Pi3Simulator) Close() error {
-	termui.Close()
+	d.close <- true
 	return nil
 }
 
 func (d *Pi3Simulator) render() {
-	
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetColumnAlignment([]int{
-		tablewriter.ALIGN_RIGHT, 
-		tablewriter.ALIGN_RIGHT, 
+		tablewriter.ALIGN_RIGHT,
+		tablewriter.ALIGN_RIGHT,
 		tablewriter.ALIGN_CENTER,
 		tablewriter.ALIGN_CENTER,
 		tablewriter.ALIGN_LEFT,
 		tablewriter.ALIGN_LEFT,
 	})
 	table.SetHeader([]string{"PULL", "STATE", "NAME", "PIN", "PIN", "NAME", "STATE", "PULL"})
-	
+
+	ticker := time.NewTicker(time.Millisecond * 100)
 	for {
-		table.ClearRows()
-		table.SetColumnAlignment([]int{
-			tablewriter.ALIGN_RIGHT, 
-			tablewriter.ALIGN_RIGHT, 
-			tablewriter.ALIGN_RIGHT,
-		})
+		select {
+		case <-d.close:
+			return
+		case <-ticker.C:
+			table.ClearRows()
+			table.SetColumnAlignment([]int{
+				tablewriter.ALIGN_RIGHT,
+				tablewriter.ALIGN_RIGHT,
+				tablewriter.ALIGN_RIGHT,
+			})
 
-		row := []string{}
-		for physicalPin, pin := range d.pins {
-			if physicalPin % 2 == 0 {
-				row = append(
-					row, 
-					pullString(pin.pull),
-					stateString(pin.state),
-					pin.name,
-					fmt.Sprintf("%d", physicalPin+1),
-				)
-			} else {
-				row = append(
-					row,
-					fmt.Sprintf("%d", physicalPin+1),
-					pin.name,
-					stateString(pin.state),
-					pullString(pin.pull),
-				)
-				//next line
-				table.Append(row)
-				row = []string{}
+			row := []string{}
+			for physicalPin, pin := range d.pins {
+				if physicalPin%2 == 0 {
+					row = append(
+						row,
+						pullString(pin.pull),
+						stateString(pin.state),
+						pin.name,
+						fmt.Sprintf("%d", physicalPin+1),
+					)
+				} else {
+					row = append(
+						row,
+						fmt.Sprintf("%d", physicalPin+1),
+						pin.name,
+						stateString(pin.state),
+						pullString(pin.pull),
+					)
+					//next line
+					table.Append(row)
+					row = []string{}
+				}
 			}
-		}
 
-		print("\033[H\033[2J")
-		table.Render()
-		
-		time.Sleep(time.Millisecond * 100)
+			print("\033[H\033[2J")
+			table.Render()
+		}
 	}
 }
 
