@@ -96,19 +96,19 @@ const (
 
 // Pin direction, a pin can be set in Input or Output mode
 const (
-	Input Direction = iota
+	Input  Direction = iota
 	Output
 )
 
 // State of pin, High / Low
 const (
-	Low State = iota
+	Low  State = iota
 	High
 )
 
 // Pull Up / Down / Off
 const (
-	PullOff Pull = iota
+	PullOff  Pull = iota
 	PullDown
 	PullUp
 )
@@ -272,7 +272,7 @@ func (d *PhysicalDevice) PullMode(pin *Pin, pull Pull) {
 	// Pull up/down/off register has offset 38 / 39, pull is 37
 	pullClkReg := uint8(pin.PinNum)/32 + 38
 	pullReg := 37
-	shift := (uint8(pin.PinNum) % 32)
+	shift := uint8(pin.PinNum) % 32
 
 	memlock.Lock()
 	defer memlock.Unlock()
@@ -339,8 +339,8 @@ func (d *PhysicalDevice) Open() (err error) {
 
 	// Convert mapped byte memory to unsafe []uint32 pointer, adjust length as needed
 	header := *(*reflect.SliceHeader)(unsafe.Pointer(&mem8))
-	header.Len /= (32 / 8) // (32 bit = 4 bytes)
-	header.Cap /= (32 / 8)
+	header.Len /= 32 / 8 // (32 bit = 4 bytes)
+	header.Cap /= 32 / 8
 
 	mem = *(*[]uint32)(unsafe.Pointer(&header))
 
@@ -380,49 +380,49 @@ func getGPIOBase() (base int64) {
 	return int64(out + 0x200000)
 }
 
-func NewPi3Simulator() *Pi3Simulator {
-	pi := &Pi3Simulator{close: make(chan bool, 1)}
+func NewPi3Simulator(renderPins bool) *Pi3Simulator {
+	pi := &Pi3Simulator{close: make(chan bool, 1), renderPins: renderPins}
 	pi.pins = []*SimulatedPin{
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "3.3V PWR", pinType: "power"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR", pinType: "power"},
-		&SimulatedPin{Pin: &Pin{PinNum: 2, device: pi}, name: "GPIO 2", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR", pinType: "power"},
-		&SimulatedPin{Pin: &Pin{PinNum: 3, device: pi}, name: "GPIO 3", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
-		&SimulatedPin{Pin: &Pin{PinNum: 4, device: pi}, name: "GPIO 4", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "UARTO TX", pinType: "-"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "UARTO RX", pinType: "-"},
-		&SimulatedPin{Pin: &Pin{PinNum: 17, device: pi}, name: "GPIO 17", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 18, device: pi}, name: "GPIO 18", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 27, device: pi}, name: "GPIO 27", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
-		&SimulatedPin{Pin: &Pin{PinNum: 22, device: pi}, name: "GPIO 22", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 23, device: pi}, name: "GPIO 23", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "3.3V PWR", pinType: "power"},
-		&SimulatedPin{Pin: &Pin{PinNum: 24, device: pi}, name: "GPIO 24", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 10, device: pi}, name: "GPIO 10", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
-		&SimulatedPin{Pin: &Pin{PinNum: 9, device: pi}, name: "GPIO 9", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 25, device: pi}, name: "GPIO 25", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 11, device: pi}, name: "GPIO 11", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 8, device: pi}, name: "GPIO 8", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
-		&SimulatedPin{Pin: &Pin{PinNum: 7, device: pi}, name: "GPIO 7", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "RESERVED", pinType: "-"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "RESERVED", pinType: "-"},
-		&SimulatedPin{Pin: &Pin{PinNum: 5, device: pi}, name: "GPIO 5", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
-		&SimulatedPin{Pin: &Pin{PinNum: 6, device: pi}, name: "GPIO 6", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 12, device: pi}, name: "GPIO 12", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 13, device: pi}, name: "GPIO 13", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
-		&SimulatedPin{Pin: &Pin{PinNum: 19, device: pi}, name: "GPIO 19", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 16, device: pi}, name: "GPIO 16", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 26, device: pi}, name: "GPIO 26", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 20, device: pi}, name: "GPIO 20", pinType: "io"},
-		&SimulatedPin{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
-		&SimulatedPin{Pin: &Pin{PinNum: 21, device: pi}, name: "GPIO 21", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "3.3V PWR", pinType: "power"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR", pinType: "power"},
+		{Pin: &Pin{PinNum: 2, device: pi}, name: "GPIO 2", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "5V PWR", pinType: "power"},
+		{Pin: &Pin{PinNum: 3, device: pi}, name: "GPIO 3", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		{Pin: &Pin{PinNum: 4, device: pi}, name: "GPIO 4", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "UARTO TX", pinType: "-"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "UARTO RX", pinType: "-"},
+		{Pin: &Pin{PinNum: 17, device: pi}, name: "GPIO 17", pinType: "io"},
+		{Pin: &Pin{PinNum: 18, device: pi}, name: "GPIO 18", pinType: "io"},
+		{Pin: &Pin{PinNum: 27, device: pi}, name: "GPIO 27", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		{Pin: &Pin{PinNum: 22, device: pi}, name: "GPIO 22", pinType: "io"},
+		{Pin: &Pin{PinNum: 23, device: pi}, name: "GPIO 23", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "3.3V PWR", pinType: "power"},
+		{Pin: &Pin{PinNum: 24, device: pi}, name: "GPIO 24", pinType: "io"},
+		{Pin: &Pin{PinNum: 10, device: pi}, name: "GPIO 10", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		{Pin: &Pin{PinNum: 9, device: pi}, name: "GPIO 9", pinType: "io"},
+		{Pin: &Pin{PinNum: 25, device: pi}, name: "GPIO 25", pinType: "io"},
+		{Pin: &Pin{PinNum: 11, device: pi}, name: "GPIO 11", pinType: "io"},
+		{Pin: &Pin{PinNum: 8, device: pi}, name: "GPIO 8", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		{Pin: &Pin{PinNum: 7, device: pi}, name: "GPIO 7", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "RESERVED", pinType: "-"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "RESERVED", pinType: "-"},
+		{Pin: &Pin{PinNum: 5, device: pi}, name: "GPIO 5", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		{Pin: &Pin{PinNum: 6, device: pi}, name: "GPIO 6", pinType: "io"},
+		{Pin: &Pin{PinNum: 12, device: pi}, name: "GPIO 12", pinType: "io"},
+		{Pin: &Pin{PinNum: 13, device: pi}, name: "GPIO 13", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		{Pin: &Pin{PinNum: 19, device: pi}, name: "GPIO 19", pinType: "io"},
+		{Pin: &Pin{PinNum: 16, device: pi}, name: "GPIO 16", pinType: "io"},
+		{Pin: &Pin{PinNum: 26, device: pi}, name: "GPIO 26", pinType: "io"},
+		{Pin: &Pin{PinNum: 20, device: pi}, name: "GPIO 20", pinType: "io"},
+		{Pin: &Pin{PinNum: 0, device: pi}, name: "GND", pinType: "ground"},
+		{Pin: &Pin{PinNum: 21, device: pi}, name: "GPIO 21", pinType: "io"},
 	}
 	return pi
 }
@@ -437,12 +437,13 @@ type SimulatedPin struct {
 }
 
 type Pi3Simulator struct {
-	pins  []*SimulatedPin
-	close chan bool
+	renderPins bool
+	pins       []*SimulatedPin
+	close      chan bool
 }
 
 func (d *Pi3Simulator) Pin(num uint8, initialDirection Direction, initialPull Pull) *Pin {
-	p :=  d.p(num)
+	p := d.p(num)
 	p.direction = initialDirection
 	p.pull = initialPull
 	return p.Pin
@@ -473,7 +474,9 @@ func (d *Pi3Simulator) PullMode(pin *Pin, pull Pull) {
 }
 
 func (d *Pi3Simulator) Open() (err error) {
-	go d.render()
+	if d.renderPins {
+		go d.render()
+	}
 	return
 }
 
@@ -513,7 +516,7 @@ func (d *Pi3Simulator) render() {
 				tablewriter.ALIGN_RIGHT,
 			})
 
-			row := []string{}
+			var row []string
 			for physicalPin, pin := range d.pins {
 				if physicalPin%2 == 0 {
 					row = append(
